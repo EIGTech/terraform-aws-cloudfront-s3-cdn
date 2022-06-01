@@ -351,9 +351,12 @@ variable "index_document" {
 }
 
 variable "redirect_all_requests_to" {
-  type        = string
-  default     = ""
-  description = "A hostname to redirect all website requests for this distribution to. If this is set, it overrides other website settings"
+  type = list(object({
+    host_name = string
+    protocol  = string
+  }))
+  default     = null
+  description = "A redirect_all_requests_to configuration block to redirect all website requests for this distribution to. If this is set, it overrides other website settings"
 }
 
 variable "error_document" {
@@ -363,8 +366,20 @@ variable "error_document" {
 }
 
 variable "routing_rules" {
-  type        = string
-  default     = ""
+  type = list(object({
+    condition = object({
+      http_error_code_returned_equals = string
+      key_prefix_equals               = string
+    })
+    redirect = object({
+      host_name               = string
+      http_redirect_code      = string
+      protocol                = string
+      replace_key_prefix_with = string
+      replace_key_with        = string
+    })
+  }))
+  default     = null
   description = "A json array containing routing rules describing redirect behavior and when redirects are applied"
 }
 

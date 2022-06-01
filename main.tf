@@ -4,7 +4,7 @@ locals {
   # Encapsulate logic here so that it is not lost/scattered among the configuration
   website_enabled           = local.enabled && var.website_enabled
   website_password_enabled  = local.website_enabled && var.s3_website_password_enabled
-  s3_origin_enabled         = local.enabled && ! var.website_enabled
+  s3_origin_enabled         = local.enabled && !var.website_enabled
   create_s3_origin_bucket   = local.enabled && var.origin_bucket == null
   s3_access_logging_enabled = local.enabled && (var.s3_access_logging_enabled == null ? length(var.s3_access_log_bucket_name) > 0 : var.s3_access_logging_enabled)
   create_cf_log_bucket      = local.cloudfront_access_logging_enabled && local.cloudfront_access_log_create_bucket
@@ -52,7 +52,7 @@ locals {
 
   override_origin_bucket_policy = local.enabled && var.override_origin_bucket_policy
 
-  lookup_cf_log_bucket = local.cloudfront_access_logging_enabled && ! local.cloudfront_access_log_create_bucket
+  lookup_cf_log_bucket = local.cloudfront_access_logging_enabled && !local.cloudfront_access_log_create_bucket
   cf_log_bucket_domain = local.cloudfront_access_logging_enabled ? (
     local.lookup_cf_log_bucket ? data.aws_s3_bucket.cf_logs[0].bucket_domain_name : module.logs.bucket_domain_name
   ) : ""
@@ -238,52 +238,105 @@ resource "aws_s3_bucket" "origin" {
   count = local.create_s3_origin_bucket ? 1 : 0
 
   bucket        = module.origin_label.id
-  acl           = "private"
   tags          = module.origin_label.tags
   force_destroy = var.origin_force_destroy
+}
 
-  dynamic "server_side_encryption_configuration" {
-    for_each = var.encryption_enabled ? ["true"] : []
+
+resource "aws_s3_bucket_acl" "origin" {
+  count  = local.create_s3_origin_bucket ? 1 : 0
+  bucket = aws_s3_bucket.origin.id
+  acl    = "private"
+}
+
+resource "aws_s3_bucket_cors_configuration" "origin" {
+  for_each = distinct(compact(concat(var.cors_allowed_origins, var.aliases, var.external_aliases)))
+
+  bucket = aws_s3_bucket.origin.id
+
+  allowed_headers = var.cors_allowed_headers
+  allowed_methods = var.cors_allowed_methods
+  allowed_origins = [each.value]
+  expose_headers  = var.cors_expose_headers
+  max_age_seconds = var.cors_max_age_seconds
+}
+
+resource "aws_s3_bucket_logging" "origin" {
+  count = local.create_s3_origin_bucket ? (local.s3_access_log_bucket_name != "" ? 1 : 0) : 0
+
+  bucket = aws_s3_bucket.origin.id
+
+  target_bucket = local.s3_access_log_bucket_name
+  target_prefix = coalesce(var.s3_access_log_prefix, "logs/${local.origin_id}/")
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "origin" {
+  count = local.create_s3_origin_bucket ? (var.encryption_enabled ? 1 : 0) : 0
+
+  bucket = aws_s3_bucket.origin.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_versioning" "origin" {
+  count = local.create_s3_origin_bucket ? (var.versioning_enabled ? 1 : 0) : 0
+
+  bucket = aws_s3_bucket.origin.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_website_configuration" "origin" {
+  for_each = var.website_enabled ? local.website_config[var.redirect_all_requests_to == "" ? "default" : "redirect_all"] : []
+
+  dynamic "error_document" {
+    for_each = [lookup(each.value, "error_document", null)]
 
     content {
-      rule {
-        apply_server_side_encryption_by_default {
-          sse_algorithm = "AES256"
+      key = error_document.value
+    }
+  }
+  dynamic "index_document" {
+    for_each = [lookup(each.value, "index_document", null)]
+
+    content {
+      suffix = index_document.value
+    }
+  }
+
+  dynamic "redirect_all_requests_to" {
+    for_each = [lookup(each.value, "redirect_all_requests_to", null)]
+
+    content {
+      host_name = redirect_all_requests_to.value.host_name
+      protocol  = redirect_all_requests_to.value.protocol
+    }
+  }
+
+  dynamic "routing_rules" {
+    for_each = [lookup(each.value, "routing_rules", null)]
+
+    content {
+
+      redirect {
+        host_name               = routing_rules.value.redirect.host_name
+        http_redirect_code      = routing_rules.value.redirect.http_redirect_code
+        protocol                = routing_rules.value.redirect.protocol
+        replace_key_prefix_with = routing_rules.value.redirect.replace_key_prefix_with
+        replace_key_with        = routing_rules.value.redirect.replace_key_with
+      }
+      dynamic "condition" {
+        for_each = routing_rules.value.condition ? [routing_rules.value.condition] : []
+        content {
+          http_error_code_returned_equals = condition.value.http_error_code_returned_equals
+          key_prefix_equals               = condition.value.key_prefix_equals
         }
       }
-    }
-  }
-
-  versioning {
-    enabled = var.versioning_enabled
-  }
-
-  dynamic "logging" {
-    for_each = local.s3_access_log_bucket_name != "" ? [1] : []
-    content {
-      target_bucket = local.s3_access_log_bucket_name
-      target_prefix = coalesce(var.s3_access_log_prefix, "logs/${local.origin_id}/")
-    }
-  }
-
-  dynamic "website" {
-    for_each = var.website_enabled ? local.website_config[var.redirect_all_requests_to == "" ? "default" : "redirect_all"] : []
-    content {
-      error_document           = lookup(website.value, "error_document", null)
-      index_document           = lookup(website.value, "index_document", null)
-      redirect_all_requests_to = lookup(website.value, "redirect_all_requests_to", null)
-      routing_rules            = lookup(website.value, "routing_rules", null)
-    }
-  }
-
-  dynamic "cors_rule" {
-    for_each = distinct(compact(concat(var.cors_allowed_origins, var.aliases, var.external_aliases)))
-    content {
-      allowed_headers = var.cors_allowed_headers
-      allowed_methods = var.cors_allowed_methods
-      allowed_origins = [cors_rule.value]
-      expose_headers  = var.cors_expose_headers
-      max_age_seconds = var.cors_max_age_seconds
     }
   }
 }
@@ -399,7 +452,7 @@ resource "aws_cloudfront_distribution" "default" {
     origin_path = var.origin_path
 
     dynamic "s3_origin_config" {
-      for_each = ! var.website_enabled ? [1] : []
+      for_each = !var.website_enabled ? [1] : []
       content {
         origin_access_identity = local.cf_access.path
       }
