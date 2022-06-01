@@ -295,7 +295,7 @@ resource "aws_s3_bucket_versioning" "origin" {
 }
 
 resource "aws_s3_bucket_website_configuration" "origin" {
-  for_each = var.website_enabled ? local.website_config[var.redirect_all_requests_to == "" ? "default" : "redirect_all"] : []
+  for_each = var.website_enabled ? toset(local.website_config[var.redirect_all_requests_to == "" ? "default" : "redirect_all"]) : []
 
   bucket = aws_s3_bucket.origin[0].id
   dynamic "error_document" {
