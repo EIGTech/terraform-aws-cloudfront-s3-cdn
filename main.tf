@@ -322,20 +322,20 @@ resource "aws_s3_bucket_website_configuration" "origin" {
     }
   }
 
-  dynamic "routing_rules" {
+  dynamic "routing_rule" {
     for_each = [lookup(each.value, "routing_rules", null)]
 
     content {
 
       redirect {
-        host_name               = routing_rules.value.redirect.host_name
-        http_redirect_code      = routing_rules.value.redirect.http_redirect_code
-        protocol                = routing_rules.value.redirect.protocol
-        replace_key_prefix_with = routing_rules.value.redirect.replace_key_prefix_with
-        replace_key_with        = routing_rules.value.redirect.replace_key_with
+        host_name               = routing_rule.value.redirect.host_name
+        http_redirect_code      = routing_rule.value.redirect.http_redirect_code
+        protocol                = routing_rule.value.redirect.protocol
+        replace_key_prefix_with = routing_rule.value.redirect.replace_key_prefix_with
+        replace_key_with        = routing_rule.value.redirect.replace_key_with
       }
       dynamic "condition" {
-        for_each = routing_rules.value.condition ? [routing_rules.value.condition] : []
+        for_each = routing_rule.value.condition ? [routing_rule.value.condition] : []
         content {
           http_error_code_returned_equals = condition.value.http_error_code_returned_equals
           key_prefix_equals               = condition.value.key_prefix_equals
