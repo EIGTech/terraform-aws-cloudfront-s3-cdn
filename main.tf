@@ -250,7 +250,7 @@ resource "aws_s3_bucket_acl" "origin" {
 }
 
 resource "aws_s3_bucket_cors_configuration" "origin" {
-  for_each = distinct(compact(concat(var.cors_allowed_origins, var.aliases, var.external_aliases)))
+  for_each = toset(compact(concat(var.cors_allowed_origins, var.aliases, var.external_aliases)))
 
   bucket = aws_s3_bucket.origin[0].id
 
