@@ -245,14 +245,14 @@ resource "aws_s3_bucket" "origin" {
 
 resource "aws_s3_bucket_acl" "origin" {
   count  = local.create_s3_origin_bucket ? 1 : 0
-  bucket = aws_s3_bucket.origin.id
+  bucket = aws_s3_bucket.origin[0].id
   acl    = "private"
 }
 
 resource "aws_s3_bucket_cors_configuration" "origin" {
   for_each = distinct(compact(concat(var.cors_allowed_origins, var.aliases, var.external_aliases)))
 
-  bucket = aws_s3_bucket.origin.id
+  bucket = aws_s3_bucket.origin[0].id
 
   allowed_headers = var.cors_allowed_headers
   allowed_methods = var.cors_allowed_methods
@@ -264,7 +264,7 @@ resource "aws_s3_bucket_cors_configuration" "origin" {
 resource "aws_s3_bucket_logging" "origin" {
   count = local.create_s3_origin_bucket ? (local.s3_access_log_bucket_name != "" ? 1 : 0) : 0
 
-  bucket = aws_s3_bucket.origin.id
+  bucket = aws_s3_bucket.origin[0].id
 
   target_bucket = local.s3_access_log_bucket_name
   target_prefix = coalesce(var.s3_access_log_prefix, "logs/${local.origin_id}/")
@@ -273,7 +273,7 @@ resource "aws_s3_bucket_logging" "origin" {
 resource "aws_s3_bucket_server_side_encryption_configuration" "origin" {
   count = local.create_s3_origin_bucket ? (var.encryption_enabled ? 1 : 0) : 0
 
-  bucket = aws_s3_bucket.origin.id
+  bucket = aws_s3_bucket.origin[0].id
 
   rule {
     apply_server_side_encryption_by_default {
@@ -285,7 +285,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "origin" {
 resource "aws_s3_bucket_versioning" "origin" {
   count = local.create_s3_origin_bucket ? (var.versioning_enabled ? 1 : 0) : 0
 
-  bucket = aws_s3_bucket.origin.id
+  bucket = aws_s3_bucket.origin[0].id
   versioning_configuration {
     status = "Enabled"
   }
