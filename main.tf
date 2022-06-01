@@ -254,11 +254,14 @@ resource "aws_s3_bucket_cors_configuration" "origin" {
 
   bucket = aws_s3_bucket.origin[0].id
 
-  allowed_headers = var.cors_allowed_headers
-  allowed_methods = var.cors_allowed_methods
-  allowed_origins = [each.value]
-  expose_headers  = var.cors_expose_headers
-  max_age_seconds = var.cors_max_age_seconds
+  cors_rule {
+    allowed_headers = var.cors_allowed_headers
+    allowed_methods = var.cors_allowed_methods
+    allowed_origins = [each.value]
+    expose_headers  = var.cors_expose_headers
+    max_age_seconds = var.cors_max_age_seconds
+  }
+
 }
 
 resource "aws_s3_bucket_logging" "origin" {
